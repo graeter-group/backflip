@@ -1,0 +1,2 @@
+PDB names of the ATLAS proteins used for training/validation/testing. Obtained via random split with partition sizes 80%/10%/10% on the ATLAS dataset.
+Please note that in the paper, we also report BackFlip's performance on the split from FlexPert (https://github.com/KoubaPetr/Flexpert)

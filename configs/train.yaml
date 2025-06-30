@@ -1,0 +1,9 @@
+defaults:
+  - data: default
+  - experiment: default
+  - model: default
+  - _self_
+
+hydra:
+  run:
+    dir: outputs/hydra/

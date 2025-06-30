@@ -1,0 +1,50 @@
+debug: False
+use_wandb: True
+use_tqdm: True
+
+seed: 123
+num_devices: 1
+warm_start: null
+warm_start_cfg_override: True
+use_swa: False
+first_val_epoch: 0
+
+wandb:
+  name: baseline
+  project: backflip
+  save_dir: outputs/
+  tags: []
+optimizer:
+  lr: 0.0001
+reset_optimizer_on_load: False
+warmup_lr: False
+warmup_lr_factor: 0.01
+plot_val_every_n: 5 # every n val epochs
+loss_weights:
+  mse: 0.
+  pearson: 0.05
+  huber: 1.
+huber_beta: 2
+prediction_weights:
+  global_rmsf: .1
+  local_flex: 1.
+trainer:
+  overfit_batches: 0
+  min_epochs: 1 # prevents early stopping
+  max_epochs: 1000
+  accelerator: gpu
+  log_every_n_steps: 1
+  deterministic: False
+  strategy: ddp
+  check_val_every_n_epoch: 1
+  default_root_dir: outputs/
+  accumulate_grad_batches: 1
+checkpointer:
+  dirpath: ckpt/${experiment.wandb.project}/${experiment.wandb.name}/${now:%Y-%m-%d}_${now:%H-%M-%S}
+  save_last: True
+  filename: "best"
+  every_n_epochs: 2
+  save_top_k: 1
+  monitor: valid/loss
+  mode: min
+  auto_insert_metric_name: False  

@@ -1,0 +1,12 @@
+defaults:
+  - data: default # specify a dataset for evaluating the ckpt
+  - _self_
+
+
+ckpt_path: null # specify the model checkpoint to evaluate
+inference_dir: null # specify the directory to save the inference results, if null, writes to ckpt dir
+evaluate_on_train: true # also evaluate on the train and val set, not only the test set
+
+hydra:
+  run:
+    dir: outputs/hydra/
