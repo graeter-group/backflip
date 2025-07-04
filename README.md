@@ -10,7 +10,47 @@ This repository relies on the [GAFL](https://github.com/hits-mli/gafl) package a
 
 ---
 
+<details open><summary><b>Table of contents</b></summary>
+  
+- [Colab Tutorial](#colab-tutorial)
+- [Inference](#inference)
+- [Installation](#installation)
+- [Citation](#citation)
+</details>
+
+## Colab Tutorial
+
+We provide an instructive [Google Colab tutorial for predicting the flexibility of ubiquitin](https://colab.research.google.com/drive/1nBz26gv7EVa8CxkbuNal6ndGzHZbwqHt?usp=sharing) that requires no local installation. Go ahead and try out BackFlip for your favorite protein!
+
 ## Inference
+
+### Using BackFlip directly in python
+
+```python
+from backflip.deployment.inference_class import BackFlip
+
+# Load backflip model from tag:
+bf = BackFlip.from_tag(tag='backflip-0.2', device='cpu')
+
+# run backflip
+prediction = bf.predict_from_pdb(pdb_path='ubiquitin.pdb')
+```
+This will return a dictionary with local and global flexibility, at a runtime below 1s on a CPU.
+
+<div align="left">
+  <img src="assets/ubq-prediction.png" width="41%"/>
+  <img src="assets/ubq-profile.svg" width="45%"/>
+  <p style="width: 80%; font-size: 12px; text-align: center; margin: auto;">
+    <em>
+      Local flexibility for ubiquitin (<a href="https://www.rcsb.org/structure/1UBQ">1UBQ</a>), predicted by BackFlip with the above code snippet.
+      BackFlip predicts the alpha helix as locally stiff, the beta sheet as slightly more flexible, and the terminus as very flexible.
+    </em>
+  </p>
+</div>
+
+
+
+### Dataset annotation
 
 Inference on the example folder containing .pdb files:
 
@@ -48,7 +88,7 @@ We provide a detailed explanation on how to compute local or global RMSF in `scr
 
 ## Installation
 
-## Installation script
+### Installation script
 
 You can use our install script (here for torch version 2.6.0 and cuda 12.4), which esssentially executes the steps specified in the section **pip** below:
 
@@ -64,7 +104,7 @@ Verify your installation by running our example script:
 cd backflip/ && python backflip/scripts/example_inference.py
 ```
 
-## pip
+### pip
 
 Optional: Create a virtual environment, e.g. with conda, and install pip23.2.1:
 
@@ -100,7 +140,7 @@ pip install torch-scatter -f https://data.pyg.org/whl/torch-2.6.0+cu124.html
 
 where you can replace cu124 by your cuda version, e.g. cu118 or cu121.
 
-## conda
+### conda
 
 FliPS relies on the [GAFL](https://github.com/hits-mli/gafl) package, which can be installed from GitHub as shown below. The dependencies besides GAFL are listed in `install_utils/environment.yaml`, we also provide a minimal environment in `install_utils/minimal_env.yaml`, where it is easier to change torch/cuda versions.
 
@@ -123,7 +163,7 @@ cd backflip
 pip install -e .
 ```
 
-## Common installation issues
+### Common installation issues
 
 Problems with torch_scatter can usually be resolved by uninstalling and re-installing it via pip for the correct torch and cuda version, e.g. `pip install torch-scatter -f https://data.pyg.org/whl/torch-2.0.0+cu124.html` for torch 2.0.0 and cuda 12.4.
 
