@@ -259,7 +259,7 @@ def backbone_to_frames(N_atoms, CA_atoms, C_atoms, resnames):
     }
 
 
-def frames_from_pdb(pdb_path:Path)->Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def frames_from_pdb(pdb_path:Path)->dict[str, torch.Tensor]:
     """
     Extracts frames from a PDB file. If the PDB file contains multiple states, it will only use the first state.
 

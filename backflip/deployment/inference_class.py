@@ -48,7 +48,7 @@ class BackFlip:
     def load_model(self, ckpt_path: Union[str, Path]):
         ckpt_path = Path(ckpt_path)
         assert ckpt_path.exists(), f"Checkpoint path {ckpt_path} does not exist."
-        ckpt = torch.load(ckpt_path, map_location='cuda', weights_only=False)
+        ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=False)
         model_ckpt = ckpt["state_dict"]
         model_ckpt = {k.replace('model.', ''): v for k, v in model_ckpt.items()}
 
@@ -62,8 +62,42 @@ class BackFlip:
             batch['res_mask'] = torch.ones_like(batch['trans_1'][..., 0]).float()  # Default mask if not provided
         return self.model(batch)
 
-    def predict_from_frames(self, translations: List[torch.Tensor], rotations: List[torch.Tensor], res_idx=None, batch_size:int=None, cuda_memory_GB:int=8, stop_grad:bool=True):
-        # NOTE: changed stop_grad for debugging
+    def predict_from_pdb(self, pdb_path: Union[str, Path, List[Path]], res_idx= None, batch_size:int=None, cuda_memory_GB:int=8)->Union[List[dict], dict]:
+        """
+        Predict a set of flexibility profiles given a path to a PDB file or a list of paths to PDB files.
+
+        Args:
+            pdb_path (Union[str, Path, List[Path]]): Path to a PDB file or a list of paths to PDB files.
+            res_idx (List[torch.Tensor], optional): List of residue indices. Defaults to None. If None, assumes res indices are torch.arange()
+            batch_size (int, optional): Maximum batch size to use. Defaults to None.
+            cuda_memory_GB (int, optional): Memory available on the GPU, used to estimate the maximum batch size. Defaults to 8.
+        Returns:
+            Union[List[dict], dict]: List of dictionaries containing the model outputs for each PDB file, or a single dictionary if a single PDB file is provided. These are typically dictionaries with keys local_flex and global_rmsf.
+        """
+        list_passed = isinstance(pdb_path, list)
+        if isinstance(pdb_path, (str, Path)):
+            pdb_path = [pdb_path]
+        assert isinstance(pdb_path, list), f'pdb_path must be a string, Path or a list of Paths. Got {type(pdb_path)}.'
+
+        translations, rotations = [], []
+        for path in pdb_path:
+            model_input = frames_from_pdb(pdb_path=path)
+            translations.append(model_input['trans_1'])
+            rotations.append(model_input['rotmats_1'])
+
+        prediction = self.predict_from_frames(translations=translations, rotations=rotations,cuda_memory_GB=8, res_idx=res_idx, batch_size=batch_size, stop_grad=True)
+
+        if not list_passed:
+            assert len(prediction) == 1, f'Internal Error: Expected a single prediction for a single PDB file, but got {len(prediction)} predictions.'
+            return prediction[0]
+        else:
+            assert len(prediction) == len(pdb_path), f'Internal Error: Expected the number of predictions to match the number of input PDB files, but got {len(prediction)} predictions for {len(pdb_path)} input files.'
+            return prediction
+
+
+
+
+    def predict_from_frames(self, translations: List[torch.Tensor], rotations: List[torch.Tensor], res_idx=None, batch_size:int=None, cuda_memory_GB:int=8, stop_grad:bool=True)-> List[dict]:
         """
         Predict a set of flexibilities given translations and rotations. Batches proteins of same lengths together and then reorders the output such that the output list has the same order as the input list.
 
@@ -73,7 +107,7 @@ class BackFlip:
             res_idx (List[torch.Tensor], optional): List of residue indices. Defaults to None. If None, assumes res indices are torch.arange()
             batch_size (int, optional): Maximum batch size to use. Defaults to None.
             cuda_memory_GB (int, optional): Memory available on the GPU. Defaults to 8.
-            stop_grad (bool, optional): If True, gradients are not computed. Defaults to True.
+            stop_grad (bool, optional): If True, gradients are not computed. Set to False if you intend to use gradients for guidance. Defaults to True.
 
         Returns:
             List[dict]: List of dictionaries containing the model outputs in the same order as the input translations.

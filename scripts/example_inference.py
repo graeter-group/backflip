@@ -2,9 +2,60 @@
 
 from backflip.deployment.inference_class import BackFlip
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 rootdir = Path(__file__).parent.parent.resolve()
-# %%
+#%%
+
+######################################################################
+# 0: PREDICT FLEXIBILITY FROM A PDB FILE
+######################################################################
+
+pdbpath = rootdir/Path('test_data/inference_examples/from_pdb_folder/5pc9.pdb')
+
+# Load backflip model from tag:
+bf = BackFlip.from_tag(tag='backflip-0.2', device='cpu')
+
+prediction = bf.predict_from_pdb(pdb_path=pdbpath)
+
+#%%
+
+local_flex = prediction['local_flex']
+global_rmsf = prediction['global_rmsf']
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+
+# Plot local_flex profile
+ax[0].plot(local_flex, label='local_flex', linewidth=2.0)
+ax[0].set_xlabel('Residue index', fontsize=16)
+ax[0].set_ylabel('Local Flexibility [$\AA$]', fontsize=16)
+ax[0].tick_params(labelsize=14)
+
+# Plot global_rmsf profile
+ax[1].plot(global_rmsf, label='global_rmsf', linewidth=2.0)
+ax[1].set_xlabel('Residue index', fontsize=16)
+ax[1].set_ylabel('Global RMSF [$\AA$]', fontsize=16)
+ax[1].tick_params(labelsize=14)
+
+fig.suptitle('BackFlip Local/Global Flexibility Prediction', fontsize=18)
+plt.tight_layout()
+
+# # Plot local_flex profile
+# plt.plot(local_flex, label='local_flex', linewidth=2.0)
+# plt.xlabel('Residue index', fontsize=16)
+# plt.ylabel('Predicted Local Flexibility [$\AA$]', fontsize=16)
+# plt.tick_params(labelsize=14)
+# plt.show()
+
+# # Plot global_rmsf profile
+# plt.plot(global_rmsf, label='global_rmsf', linewidth=2.0)
+# plt.xlabel('Residue index', fontsize=16)
+# plt.ylabel('Predicted Global RMSF [$\AA$]', fontsize=16)
+# plt.tick_params(labelsize=14)
+# plt.show()
+
+
+#%%
 
 ######################################################################
 # 1: ANNOTATE FLEXIBILITY AS B FACTOR IN PDB FILES
@@ -27,7 +78,6 @@ bf.predict(input_path=pdb_folder_test,
 # Visualize results from the B-factors of the prediction. Assuming the inference was run with overwrite=False as above
 
 from backflip.deployment.utils import profile_from_bfac
-import matplotlib.pyplot as plt
 
 inference_loc_test = pdb_folder_test / 'inference_results' / '5pc9.pdb'
 
