@@ -1,7 +1,7 @@
 TORCH_VERSION=${1:-"2.6.0"}
 CUDA_VERSION=${2:-"124"}
 PYTHON_VERSION=${3:-"3.12"}
-BACKFLIP_DIR=${4:-"backflip-dev"}
+BACKFLIP_DIR=${4:-"backflip"}
 
 if [ ! -d "$BACKFLIP_DIR" ]; then
 	echo "Error: Backflip directory '$BACKFLIP_DIR' does not exist."
