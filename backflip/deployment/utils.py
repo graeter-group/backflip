@@ -31,17 +31,20 @@ from backflip.data import utils as du
 from backflip.data.pdb_dataloader import PICKLE_EXTENSIONS
 from typing import Union
 
+FLEX_FEATS = ['global_rmsf', 'local_flex']
 
-LATEST_TAG = 'backflip-0.2'
+LATEST_TAG = 'backflip-1.0'
 CKPT_URLS = {
     'backflip-0.1': 'https://keeper.mpdl.mpg.de/f/e96cda3b3dbd4911af48/?dl=1',
     'backflip-0.2': 'https://keeper.mpdl.mpg.de/f/34c3c08ef8a443bfa5c6/?dl=1',
-    'backflip-0.2-flexpert-noseq': 'https://keeper.mpdl.mpg.de/f/f5b33d2994f443a4ae1d/?dl=1',
+    'backflip-1.0': 'https://keeper.mpdl.mpg.de/f/d30eb00c17e14f8d86cf/?dl=1', # uses no sequence information
+    'backflip-1.0-seq': 'https://keeper.mpdl.mpg.de/f/e5494325fabb47479451/?dl=1', # uses one-hot encoded amino acid type (but no evolutionary information)
 }
 CONFIG_URLS = {
     'backflip-0.1': 'https://keeper.mpdl.mpg.de/f/d21a10157fc049928afb/?dl=1',
     'backflip-0.2': 'https://keeper.mpdl.mpg.de/f/c27f1c32892a42c59736/?dl=1',
-    'backflip-0.2-flexpert-noseq': 'https://keeper.mpdl.mpg.de/f/61879f8b2f344375ad5a/?dl=1',
+    'backflip-1.0': 'https://keeper.mpdl.mpg.de/f/1bfa184fbee247c98afa/?dl=1',
+    'backflip-1.0-seq': 'https://keeper.mpdl.mpg.de/f/ec0b00204c774c63802a/?dl=1',
 }
 
 
@@ -219,13 +222,13 @@ def get_structure_tite(pdb_loc: str,
 
     return protein, chain_ids.tolist() if len(chain_ids) > 1 else chain_ids[0]
 
-def save_tite_as_pdb(protein_array, pdb_name:str, pdb_dir:str):
+def save_tite_as_pdb(protein_array, pdb_name:str, out_folder:str)->None:
     '''
     Saves the selected chain as a clean .pdb file with renumbered residues
     '''
     file = pdb_io.PDBFile()
     file.set_structure(protein_array)
-    loc_pdb_save = os.path.join(pdb_dir, f'{pdb_name}.pdb')
+    loc_pdb_save = os.path.join(out_folder, f'{pdb_name}.pdb')
     file.write(loc_pdb_save)
     return None
 
@@ -256,6 +259,7 @@ def backbone_to_frames(N_atoms, CA_atoms, C_atoms, resnames):
         "trans_1": trans,
         "rotmats_1": rotmats,
         "seq_onehot": seq_onehot,
+        "aatype": aatypes,
     }
 
 
@@ -309,7 +313,7 @@ def chain_feats_from_pdb(pdb_path: Path) -> dict:
     return chain_features
 
 
-def read_path(path: str, seed:int=123, ensemble:bool=False, return_feats:bool=False) -> Dict[str, torch.Tensor]:
+def read_path(path: str, seed:int=123, ensemble:bool=False, return_feats:bool=False):
     '''
     Reduced version of the process_csv_row function in the PDBDataLoader class for inference.
     Returns:
@@ -348,9 +352,17 @@ def read_path(path: str, seed:int=123, ensemble:bool=False, return_feats:bool=Fa
         'rotmats_1': rotmats_1,
         'trans_1': trans_1,
         }
+    if 'aatype' in processed_feats:
+        d['aatype'] = torch.tensor(processed_feats['aatype']).long()
+
+    for flex_feat in FLEX_FEATS:
+        if flex_feat in feat_dict:
+            assert feat_dict[flex_feat].shape[0] == d['trans_1'].shape[0], \
+                f"Flexibility feature {flex_feat} length {feat_dict[flex_feat].shape[0]} does not match number of residues {d['trans_1'].shape[0]} in {path}."
+            processed_feats[flex_feat] = torch.tensor(feat_dict[flex_feat]).float()
 
     if return_feats:
-        return processed_feats
+        return d, processed_feats
     else:
         return d
 
@@ -396,7 +408,7 @@ def parse_input_paths(input_path: Union[str, Path]) -> Tuple[List[Path], str]:
 
     raise ValueError("Invalid input path")
 
-def save_prediction(input_path, prediction, output_folder, overwrite=False):
+def save_prediction(input_path, prediction, output_folder, overwrite=False, rmsf_type:str='global_rmsf'):
     
     PICKLE_EXTENSIONS = {'.pkl', '.pickle', '.pck', '.db', '.pck'}
     file_extension = Path(input_path).suffix
@@ -404,7 +416,8 @@ def save_prediction(input_path, prediction, output_folder, overwrite=False):
         raise ValueError(f'Unknown file extension {file_extension}')
 
     if file_extension in {'.pdb', '.cif'}:
-        loaded_data, _ = get_structure_tite(input_path, ensemble=False, backbone=True, clean_hetero=True)
+        # TODO: this will raise issues if there are HETATM that still have bb atoms.
+        loaded_data, _ = get_structure_tite(input_path, ensemble=False, backbone=True, clean_hetero=False)
     elif file_extension in {'.npz'} | PICKLE_EXTENSIONS:
         if file_extension == '.npz':
             loaded_data = dict(np.load(input_path))
@@ -412,25 +425,59 @@ def save_prediction(input_path, prediction, output_folder, overwrite=False):
             loaded_data = du.read_pkl(input_path)
         else:
             raise ValueError(f'Unsupported file extension {file_extension} for input path {input_path}')
+        # simpler to just write into the output folder
         for k, v in prediction.items():
             if not overwrite and k in loaded_data:
-                raise ValueError(f'Key {k} already present in {input_path}. Set overwrite=True to overwrite.')
-            loaded_data[k] = v.cpu().numpy()
+                raise ValueError(f'Key {k} already present in {input_path}. Set overwrite=True to overwrite existing keys.')
+            loaded_data[k] = v.cpu().numpy() if isinstance(v, torch.Tensor) else v
     else:
         raise ValueError(f'Unsupported file extension {file_extension} for input path {input_path}')
     
     if file_extension in {'.npz'}:
-        np.savez(output_folder / Path(input_path).name, **loaded_data)
+        np.savez(Path(output_folder) / Path(input_path).name, **loaded_data)
     elif file_extension in PICKLE_EXTENSIONS:
-        du.write_pkl(output_folder / Path(input_path).name, loaded_data)
+        du.write_pkl(Path(output_folder) / Path(input_path).name, loaded_data)
     else:
-        assert prediction['local_flex'].shape[0] == loaded_data.shape[0] // 4, \
-            f'Expected {loaded_data.shape[0] // 4} residues, got {prediction["local_flex"].shape[0]} residues in {input_path}.'
+        # Counts only; assume backbone order per residue (N, CA, C, [O optional on last residue])
+        N  = int(np.sum(loaded_data.atom_name == 'N'))
+        CA = int(np.sum(loaded_data.atom_name == 'CA'))
+        C  = int(np.sum(loaded_data.atom_name == 'C'))
+        O  = int(np.sum(loaded_data.atom_name == 'O'))
+
+        # Require N, CA, C present for every residue; allow O to be missing only for the last residue; this happens sometimes
+        if not (N == CA == C and O in (N, N - 1)):
+            raise ValueError(
+                f"Unexpected backbone counts for {input_path}: N={N}, CA={CA}, C={C}, O={O}"
+            )
+
+        n_residues = N  # residues inferred from N/CA/C
+		
+        pred = prediction[rmsf_type]
+        pred_np = pred.detach().cpu().numpy().astype(np.float32) if isinstance(pred, torch.Tensor) \
+                else np.asarray(pred, dtype=np.float32)
+
+        length = pred_np.shape[0]
+        if length not in (n_residues, n_residues + 1):
+            raise ValueError(
+                f"Per-residue prediction length ({length}) not in {{n_residues, n_residues+1}} "
+                f"(n_residues={n_residues}) for {input_path}."
+            )
+        if length == n_residues + 1:
+            pred_np = pred_np[:n_residues]
+
+        idx = np.arange(n_residues).repeat(4)
+        if O == n_residues - 1:
+            # exactly one missing O, assumed to be the last atom in the file
+            idx = idx[:-1]
+
+        b_factors = pred_np[idx]
+        b_factors = np.asarray(b_factors, dtype=np.float32).reshape(-1)
+
+        if b_factors.ndim != 1:
+            raise ValueError(f"b_factors not 1-D after conversion: shape={b_factors.shape}")
         
-        local_flex_as_b_factor = prediction['local_flex'].cpu().numpy().astype(np.float32)
-        local_flex_as_b_factor = np.repeat(local_flex_as_b_factor, 4)
-        loaded_data.set_annotation('b_factor', local_flex_as_b_factor)
-        save_tite_as_pdb(loaded_data, pdb_name=Path(input_path).stem, pdb_dir=output_folder)
+        loaded_data.set_annotation('b_factor', b_factors)
+        save_tite_as_pdb(loaded_data, pdb_name=Path(input_path).stem, out_folder=output_folder)
 
 def profile_from_bfac(path:str):
     struct = load_structure(path, extra_fields=["b_factor"])

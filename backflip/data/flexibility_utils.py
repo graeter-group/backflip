@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Union
 import biotite.structure.io as strucio
 from biotite.structure.io.xtc import XTCFile
-from biotite.structure.superimpose import superimpose, superimpose_apply
+from biotite.structure.superimpose import superimpose
 from biotite.structure import AtomArrayStack
 from tqdm.auto import tqdm
 from pathlib import Path
@@ -29,6 +29,7 @@ def compute_rmsf(tite, window_size:int=13, n_ref:int=10, n_draw:int=100, np_seed
     np_seed : int
     The seed for the random number generator.
         """
+    # NOT used anymore, legacy
     alignment = get_alignment(confs=tite,
                          global_alignment=not np.isfinite(window_size) or window_size <= 0, 
                          window_size=window_size, 
@@ -228,11 +229,12 @@ def get_alignment(confs:AtomArrayStack,
 
                 if store_full_backbone:
                     conf_bb = conformation[conformation.atom_name.isin(allowed_atoms)]
-                    fitted_bb = superimpose_apply(conf_bb, transform)
-                    if not calc_global_rmsf:
-                        sample_positions.append(fitted_bb[fitted_bb.res_id == res_idx + 1].coord)
-                    else:
-                        global_aligned.append(fitted_bb.coord)
+                    # NOTE: deprecated; do we need it?
+                    # fitted_bb = superimpose_apply(conf_bb, transform)
+                    # if not calc_global_rmsf:
+                    #     sample_positions.append(fitted_bb[fitted_bb.res_id == res_idx + 1].coord)
+                    # else:
+                    #     global_aligned.append(fitted_bb.coord)
                 else:
                     if not calc_global_rmsf:
                         sample_positions.append(fitted[res_idx_in_window].coord)

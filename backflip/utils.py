@@ -5,7 +5,9 @@ import os
 import numpy as np
 from gafl.analysis import utils as au
 from pytorch_lightning.utilities.rank_zero import rank_zero_only
-
+import pandas as pd
+from pathlib import Path
+import re
 
 def save_traj(
         sample: np.ndarray,
@@ -99,3 +101,17 @@ def flatten_dict(raw_dict):
         else:
             flattened.append((k, v))
     return flattened
+
+def rename_csv_paths(csv:str, save:bool=True):
+    df = pd.read_csv(csv)
+    new_sample_paths = []
+    for idx, row in df.iterrows():
+        sample_name = row['pdb_name']
+        new_path = Path(csv).parent / f"{sample_name}.npz"
+        new_sample_paths.append(new_path)
+    df['processed_path'] = new_sample_paths
+    if save:
+        new_csv_path = Path(csv).parent / f"{Path(csv).stem}.csv"
+        df.to_csv(new_csv_path, index=False)
+        print(f"Saved renamed CSV to {new_csv_path}")
+    return df
