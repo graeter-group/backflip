@@ -220,20 +220,22 @@ def read_npz(read_path: str, conf_idx: int = None, seed: int = 123):
     - npz: dict with the npz file contents
     """
     npz = np.load(read_path)
+    coords = npz["coords"]
 
-    # pick conf
-    if conf_idx is None:
-        coords = npz['coords']
-        # print(f'Coordinates shape in the read_npz:', coords.shape)
-        if len(coords.shape) == 3:
-            raise ValueError(f'Expected 2D coordinates of shape(3*N_res,3), got 3dims of shape {coords.shape}')
+    if coords.ndim == 3:
+        # Multiple conformations case
+        if conf_idx is None:
+            np.random.seed(seed)
+            conf_idx = np.random.randint(0, coords.shape[0])
+            # print(f"loaded random conf: {conf_idx}")
+        coords = coords[conf_idx]  # (N_atoms, 3)
+
+    elif coords.ndim == 2:
+        # Single conformation case
+        if conf_idx is not None:
+            pass # just ignore conf_idx
     else:
-        # assert 'states' in npz, 'No states found in npz file but conf_idx specified'
-        np.random.seed(seed)
-        coords = npz['coords']
-        conf_idx = np.random.randint(0, len(coords))
-        coords = npz['coords'][conf_idx]
-        print('loaded conf:', conf_idx)
+        raise ValueError(f"Expected coords with ndim 2 or 3, got {coords.shape}")
 
     chain_id = npz['chain_id']
     res_id = npz['res_id']
@@ -244,6 +246,7 @@ def read_npz(read_path: str, conf_idx: int = None, seed: int = 123):
     # construct a biotite AtomArray
     chain_feats = struc.AtomArray(len(coords))
     chain_feats.coord = coords
+
     chain_feats.chain_id = chain_id
     chain_feats.res_id = res_id
     chain_feats.res_name = res_name

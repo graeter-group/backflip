@@ -12,10 +12,12 @@ import logging
 from typing import Union
 
 # Pytorch lightning imports
+import pytorch_lightning as pl
 from pytorch_lightning import LightningDataModule, LightningModule, Trainer
 from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
+from packaging import version
 
 from gafl.experiment_utils import get_pylogger, flatten_dict
 
@@ -23,13 +25,12 @@ from backflip.models.flexibility_module import FlexibilityModule
 from backflip.data.pdb_dataloader import PdbDataModule
 
 
-
 class Experiment:
     def __init__(self, *, cfg: DictConfig, log=get_pylogger(__name__)):
         self._cfg = cfg
         self._data_cfg = cfg.data
         self._exp_cfg = cfg.experiment
-
+        
         self.log = log
         self.trainer = None
 
@@ -56,9 +57,10 @@ class Experiment:
                 logger = WandbLogger(
                     **self._exp_cfg.wandb,
                 )
+                print(f"[wandb] entity={logger.experiment.entity} project={logger.experiment.project} name={logger.experiment.name}")
             else:
                 logger = None
-            
+
             # Checkpoint directory.
             ckpt_dir = self._exp_cfg.checkpointer.dirpath
             os.makedirs(ckpt_dir, exist_ok=True)
@@ -79,15 +81,25 @@ class Experiment:
         devices = GPUtil.getAvailable(order='memory', limit = 8)[:self._exp_cfg.num_devices]
         self.log.info(f"Using devices: {devices}")
 
-        self.trainer = Trainer(
+        trainer_kwargs = dict(
             **self._exp_cfg.trainer,
             callbacks=callbacks,
             logger=logger,
-            replace_sampler_ddp=False, # in later versions of pytorch lightning, this is called use_distributed_sampler
             enable_progress_bar=self._exp_cfg.use_tqdm,
             enable_model_summary=True,
             devices=devices,
         )
+
+        # the `replace_sampler_ddp` flag is deprecated in newer versions of PL
+        PL_VERSION = version.parse(pl.__version__)
+        if PL_VERSION >= version.parse("2.3.0"):
+            trainer_kwargs["use_distributed_sampler"] = False
+            # defaulting to True; pl expects it by default when using DDP and there are unused parameters
+            trainer_kwargs["strategy"] = "ddp_find_unused_parameters_true"
+        else:
+            trainer_kwargs["replace_sampler_ddp"] = False
+
+        self.trainer = Trainer(**trainer_kwargs)
 
         self.trainer.fit(
             model=self._model,
@@ -130,14 +142,24 @@ class Experiment:
             devices = GPUtil.getAvailable(order='memory', limit = 8)[:self._exp_cfg.num_devices]
             self.log.info(f"Using devices: {devices}")
 
-            self.trainer = Trainer(
+            trainer_kwargs = dict(
                 **self._exp_cfg.trainer,
                 logger=False,
-                replace_sampler_ddp=False, # in later versions of pytorch lightning, this is called use_distributed_sampler
                 enable_progress_bar=self._exp_cfg.use_tqdm,
                 enable_model_summary=False,
                 devices=devices,
             )
+
+            # the `replace_sampler_ddp` flag is deprecated in newer versions of PL
+            PL_VERSION = version.parse(pl.__version__)
+            if PL_VERSION >= version.parse("2.3.0"):
+                trainer_kwargs["use_distributed_sampler"] = False
+                # defaulting to True; pl expects it by default when using DDP and there are unused parameters
+                trainer_kwargs["strategy"] = "ddp_find_unused_parameters_true"
+            else:
+                trainer_kwargs["replace_sampler_ddp"] = False
+
+            self.trainer = Trainer(**trainer_kwargs)
 
         # run test
         # disable logging:

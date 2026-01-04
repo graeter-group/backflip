@@ -43,6 +43,11 @@ slurm_logs/
 generate_dataset/
 **/generate_dataset/
 new_scripts/
+scripts/figures
+scripts/inference_multiple_ckpts.py
+scripts/inspect_dataset.py
+scripts/analysis_multiple_ckpts.py
+scripts/table_metrics.py
 **debugging_stuff/
 debugging_stuff.py
 
@@ -56,6 +61,7 @@ debugging_stuff.py
 
 # Text files
 **/*.txt
+!**/requirements*.txt
 
 # Tarballs and archives
 **/*.tar
@@ -241,3 +247,10 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+scripts/*.png
+test_data/inference_examples/inference_results/*
+ATLAS-v5-mean_rmsf/*
+
+test_data/inference_examples/from_pdb_folder/inference_results/*
+!scripts/cmd_line_example.sh

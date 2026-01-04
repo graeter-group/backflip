@@ -8,7 +8,7 @@ flexibility:
     - 1
     - 1
   max_values:
-    - 20.
+    - 15.
     - 5.
 
 node_embed_size: 32
@@ -44,5 +44,5 @@ gfa:
   body_order: 3
   seq_tfmr_num_heads: 4
   seq_tfmr_num_layers: 1
-  num_blocks: 2
+  num_blocks: 4
   readout_c_hidden: 16
