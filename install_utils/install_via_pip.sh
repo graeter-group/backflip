@@ -26,13 +26,12 @@ pushd "${THISDIR}/../.."
 
 # install torch
 if [[ "$CUDA_VERSION" == "cpu" ]]; then
-    pip install torch==$TORCH_VERSION --index-url https://download.pytorch.org/whl/cpu
+    pip install torch==$TORCH_VERSION torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
     pip install torch-scatter -f https://data.pyg.org/whl/torch-${TORCH_VERSION}+cpu.html
+else
+    pip install torch==$TORCH_VERSION torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu$CUDA_VERSION
+    pip install torch-scatter -f https://data.pyg.org/whl/torch-${TORCH_VERSION}+cu${CUDA_VERSION}.html
 fi
-
-pip install torch==$TORCH_VERSION --index-url https://download.pytorch.org/whl/cu$CUDA_VERSION
-pip install torch-scatter -f https://data.pyg.org/whl/torch-${TORCH_VERSION}+cu${CUDA_VERSION}.html
-
 
 # add the torch version to the requirements file to make sure it is not overwritten
 if [[ "$PYTHON_VERSION" != "None" ]]; then
