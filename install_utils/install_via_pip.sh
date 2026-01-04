@@ -25,8 +25,14 @@ THISDIR=$(dirname "$(readlink -f "$0")")
 pushd "${THISDIR}/../.."
 
 # install torch
+if [[ "$CUDA_VERSION" == "cpu" ]]; then
+    pip install torch==$TORCH_VERSION --index-url https://download.pytorch.org/whl/cpu
+    pip install torch-scatter -f https://data.pyg.org/whl/torch-${TORCH_VERSION}+cpu.html
+fi
+
 pip install torch==$TORCH_VERSION --index-url https://download.pytorch.org/whl/cu$CUDA_VERSION
 pip install torch-scatter -f https://data.pyg.org/whl/torch-${TORCH_VERSION}+cu${CUDA_VERSION}.html
+
 
 # add the torch version to the requirements file to make sure it is not overwritten
 if [[ "$PYTHON_VERSION" != "None" ]]; then

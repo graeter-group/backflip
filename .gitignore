@@ -61,6 +61,7 @@ debugging_stuff.py
 
 # Text files
 **/*.txt
+!**/requirements*.txt
 
 # Tarballs and archives
 **/*.tar

@@ -16,7 +16,15 @@ from backflip.models.flexibility_module import FlexibilityModule
 from backflip.deployment.utils import ckpt_path_from_tag, estimate_max_batchsize, read_path, frames_from_pdb, save_prediction, parse_input_paths
 
 class BackFlip:
+    """Thin inference wrapper around a trained BackFlip checkpoint."""
+
     def __init__(self, ckpt_path: Union[str, Path], device: str="cuda", features: List[str]=None, confidence_intervals: bool=False, progress_bar: bool=True, rmsf_type: str='global_rmsf'):
+        """
+        Load a checkpoint and its training config for inference.
+
+        The checkpoint directory must include the original config.yaml so that
+        the model architecture (and aatype usage) matches training.
+        """
 
         ckpt_dir = os.path.dirname(ckpt_path)
         config_path = os.path.join(ckpt_dir, 'config.yaml')
@@ -50,15 +58,28 @@ class BackFlip:
 
     @classmethod
     def from_tag(cls, tag: str="latest", device: str="cuda", features: List[str]=None, confidence_intervals: bool=False, progress_bar: bool=True):
+        """
+        Resolve a known tag to a local checkpoint (downloading if needed).
+
+        The tag maps to a directory under models/ and may trigger a download if
+        weights are not present locally.
+        """
         ckpt_path = ckpt_path_from_tag(tag)
         return cls(ckpt_path, device, features, confidence_intervals, progress_bar)
 
         
     def to(self, device: str):
+        """Move the loaded model and future inputs to a different device."""
         self.model.to(device)
         self.device = device
 
     def load_model(self, ckpt_path: Union[str, Path], device:str='cuda'):
+        """
+        Load model weights from a Lightning checkpoint into the bare model.
+
+        The checkpoint stores weights under the "model." prefix; this method
+        strips that prefix before loading into the FlexibilityModel instance.
+        """
         ckpt_path = Path(ckpt_path)
         assert ckpt_path.exists(), f"Checkpoint path {ckpt_path} does not exist."
         ckpt = torch.load(ckpt_path, map_location=device if device is not None else self.device, weights_only=False)
@@ -71,19 +92,29 @@ class BackFlip:
         return model
 
     def __call__(self, batch: dict):
+        """
+        Run the model on a prepared batch dict.
+
+        If res_mask is missing, a full mask is injected so that every residue
+        contributes to the prediction.
+        """
         if 'res_mask' not in batch.keys():
             batch['res_mask'] = torch.ones_like(batch['trans_1'][..., 0]).float()  # Default mask if not provided
         return self.model(batch)
 
     def predict_from_pdb(self, pdb_path: Union[str, Path, List[Path]], res_idx= None, batch_size:int=None, cuda_memory_GB:int=8)->Union[List[dict], dict]:
         """
-        Predict a set of flexibility profiles given a path to a PDB file or a list of paths to PDB files.
+        Predict flexibility profiles from one or more PDB files.
+
+        This uses the backbone frame representation extracted from each PDB and
+        forwards through the model. Inputs of equal length are batched together
+        in `predict_from_frames` to avoid padding.
 
         Args:
             pdb_path (Union[str, Path, List[Path]]): Path to a PDB file or a list of paths to PDB files.
-            res_idx (List[torch.Tensor], optional): List of residue indices. Defaults to None. If None, assumes res indices are torch.arange()
-            batch_size (int, optional): Maximum batch size to use. Defaults to None.
-            cuda_memory_GB (int, optional): Memory available on the GPU, used to estimate the maximum batch size. Defaults to 8.
+            res_idx (List[torch.Tensor], optional): Optional residue indices. If None, uses torch.arange per protein.
+            batch_size (int, optional): Max batch size for same-length proteins. If None, estimate from cuda_memory_GB.
+            cuda_memory_GB (int, optional): Used to estimate batch size when batch_size is None.
         Returns:
             Union[List[dict], dict]: List of dictionaries containing the model outputs for each PDB file, or a single dictionary if a single PDB file is provided. These are typically dictionaries with keys local_flex and global_rmsf.
         """
@@ -115,12 +146,13 @@ class BackFlip:
         Predict a set of flexibilities given translations and rotations. Batches proteins of same lengths together and then reorders the output such that the output list has the same order as the input list.
 
         Args:
-            translations (List[torch.Tensor]): List of translations of shape (N, L, 3).
-            rotations (List[torch.Tensor]): List of rotations of shape (N, L, 3, 3).
-            res_idx (List[torch.Tensor], optional): List of residue indices. Defaults to None. If None, assumes res indices are torch.arange()
-            batch_size (int, optional): Maximum batch size to use. Defaults to None.
-            cuda_memory_GB (int, optional): Memory available on the GPU. Defaults to 8.
-            stop_grad (bool, optional): If True, gradients are not computed. Set to False if you intend to use gradients for guidance. Defaults to True.
+            translations (List[torch.Tensor]): Per-protein translations, shape (L, 3).
+            rotations (List[torch.Tensor]): Per-protein rotation matrices, shape (L, 3, 3).
+            res_idx (List[torch.Tensor], optional): Residue indices per protein. If None, uses torch.arange per length.
+            batch_size (int, optional): Max batch size for same-length proteins. If None, estimate from cuda_memory_GB.
+            cuda_memory_GB (int, optional): Used to estimate batch size when batch_size is None.
+            stop_grad (bool, optional): If True, disables gradients (faster inference).
+            aatypes (List[torch.Tensor], optional): Per-residue amino acid type indices; required if the checkpoint expects aatype input.
 
         Returns:
             List[dict]: List of dictionaries containing the model outputs in the same order as the input translations.
@@ -191,12 +223,13 @@ class BackFlip:
     def predict(self, input_path: Union[str, Path], output_folder:str=None, batch_size: int = None, cuda_memory_GB: int = 8, stop_grad: bool = True, path_batchsize: int = 1000, overwrite: bool = False):
 
         """
+        Run inference on a path or folder and write outputs to disk.
+
+        Input paths can be a directory of PDB/CIF files, a single PDB/CIF file,
+        or a CSV pointing to processed npz/pkl files. For PDB/CIF input, the
+        selected profile is written to the B-factor field.
         Checks whether data is present and only overwrites if `overwrite=True`.
         Args:
-            - pdb_folder (str): Path to the folder containing structural files.
-                - chain_id (str): Chain identifier.
-                - modeled_seq_len (int): Length of the modeled sequence.
-                - processed_path (str): Path to the processed npz file.
             batch_size (int, optional): Maximum batch size. Defaults to None.
             cuda_memory_GB (int, optional): Available GPU memory in GB. Defaults to 8. Reduce if you run out of GPU memory.
             stop_grad (bool, optional): If True, disables gradient computation. Defaults to True.
@@ -270,11 +303,16 @@ class BackFlip:
 
     def predict_from_csv(self, csv_path: Union[str, Path], batch_size: int = None, cuda_memory_GB: int = 8, stop_grad: bool = True, path_batchsize: int = 1000):
         """
-        Run inference on a CSV that points to processed files and return predictions along with available ground truth.
+        Run inference on a CSV of processed paths and return predictions with ground truth.
+
+        The CSV is expected to contain a processed_path column (via
+        `parse_input_paths`). Ground-truth arrays are collected from the
+        processed files for keys that overlap with model outputs (typically
+        global_rmsf/local_flex).
 
         Returns:
-            predictions (List[dict]): list of model outputs
-            ground_truth (List[dict]): list of ground truth arrays for keys present in the predictions (if available)
+            predictions (List[dict]): model outputs per entry.
+            ground_truth (List[dict]): ground-truth arrays per entry for keys present in predictions.
         """
         total_time = 0
         prediction_time = 0

@@ -153,7 +153,8 @@ def download_model(tag:str='latest'):
     config_path = ckpt_dir / 'config.yaml'
 
     _download_file(config_url, config_path, progress_bar=False)
-    _download_file(ckpt_url, ckpt_path, progress_bar=False)
+    print(f"Downloading model weights for tag '{tag}' from {ckpt_url}")
+    _download_file(ckpt_url, ckpt_path, progress_bar=True)
 
     return ckpt_path
 
