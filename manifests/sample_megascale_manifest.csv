@@ -1,0 +1,6 @@
+protein_id,split,pdb_path,fasta_path,ddg_csv_path,mutation,wt_aa,mut_aa,mut_pos,ddg,chain_id,source_dataset,temperature,quality_flag
+TEST1,train,external/megascale/pdbs/TEST1.pdb,external/megascale/fastas/TEST1.fasta,external/megascale/ddg_csvs/TEST1.csv,A42V,A,V,42,0.5,A,megascale,25.0,pass
+TEST1,train,external/megascale/pdbs/TEST1.pdb,external/megascale/fastas/TEST1.fasta,external/megascale/ddg_csvs/TEST1.csv,G15D,G,D,15,-1.2,A,megascale,25.0,pass
+TEST2,val,external/megascale/pdbs/TEST2.pdb,external/megascale/fastas/TEST2.fasta,external/megascale/ddg_csvs/TEST2.csv,L7Q,L,Q,7,0.8,A,megascale,25.0,pass
+TEST3,val,external/megascale/pdbs/TEST3.pdb,external/megascale/fastas/TEST3.fasta,external/megascale/ddg_csvs/TEST3.csv,M101I,M,I,101,1.1,A,megascale,25.0,pass
+TEST4,test,external/megascale/pdbs/TEST4.pdb,external/megascale/fastas/TEST4.fasta,external/megascale/ddg_csvs/TEST4.csv,S55F,S,F,55,-0.3,A,megascale,25.0,pass

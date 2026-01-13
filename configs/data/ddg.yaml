@@ -1,0 +1,24 @@
+dataset:
+  seed: 123
+  manifest_path: <path/to/ddg_manifest.csv>
+  train_manifest: null
+  val_manifest: null
+  test_manifest: null
+  train_max_rows: null
+  val_max_rows: null
+  test_max_rows: null
+  dev_run: False
+  dev_num_examples: 10
+  pick_random_conf: True
+  num_confs: 100
+  pick_random_conf_prob: 0.2
+
+loader:
+  batch_size: 16
+  num_workers: 4
+  prefetch_factor: 2
+
+sampler:
+  max_batch_size: 100
+  max_num_res_squared: 1_000_000
+  clustered: False

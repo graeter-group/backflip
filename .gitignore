@@ -6,6 +6,8 @@ wandb*.json
 **/*.ckpt
 ckpt/
 weights/
+*.pt
+*.pth
 
 # PyTorch model files
 **/*.pth
@@ -79,6 +81,12 @@ out_slurm/
 dataset_scope/
 flex_labeled_scope/
 flex_labeled_scope_npz/
+external/
+manifests/*.csv
+manifests/*.tsv
+runs/
+!manifests/sample_megascale_manifest.csv
+dev_ddg/
 
 
 # Byte-compiled / optimized / DLL files

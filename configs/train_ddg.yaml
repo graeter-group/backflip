@@ -1,0 +1,9 @@
+defaults:
+  - data: ddg
+  - experiment: ddg
+  - model: ddg
+  - _self_
+
+hydra:
+  run:
+    dir: outputs/hydra/
