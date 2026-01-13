@@ -10,6 +10,7 @@ use_swa: False
 first_val_epoch: 0
 
 wandb:
+  entity: null
   name: baseline
   project: backflip
   save_dir: outputs/
@@ -31,7 +32,7 @@ prediction_weights:
 trainer:
   overfit_batches: 0
   min_epochs: 1 # prevents early stopping
-  max_epochs: 1000
+  max_epochs: 500
   accelerator: gpu
   log_every_n_steps: 1
   deterministic: False

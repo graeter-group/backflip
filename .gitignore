@@ -45,6 +45,11 @@ slurm_logs/
 generate_dataset/
 **/generate_dataset/
 new_scripts/
+scripts/figures
+scripts/inference_multiple_ckpts.py
+scripts/inspect_dataset.py
+scripts/analysis_multiple_ckpts.py
+scripts/table_metrics.py
 **debugging_stuff/
 debugging_stuff.py
 
@@ -58,6 +63,7 @@ debugging_stuff.py
 
 # Text files
 **/*.txt
+!**/requirements*.txt
 
 # Tarballs and archives
 **/*.tar
