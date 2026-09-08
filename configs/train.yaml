@@ -1,7 +1,7 @@
 defaults:
-  - data: default
-  - experiment: default
-  - model: default
+  - data: new_backflip
+  - experiment: new_backflip
+  - model: new_backflip
   - _self_
 
 hydra:

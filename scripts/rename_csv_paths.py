@@ -1,6 +1,5 @@
 from backflip.utils import rename_csv_paths
 from argparse import ArgumentParser
-import pandas as pd
 
 if __name__ == "__main__":
 

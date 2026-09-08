@@ -1,17 +1,22 @@
-# BackFlip - Backbone Flexibility Predictor
+# BackFlip 2: Backbone Flexibility Predictor
+
+_Predicting directional flexibility and pairwise couplings of proteins_
 
 ![BackFlip](assets/backflip_github_small.png)
 
 ## Description
 
-BackFlip is a model trained to predict **per-residue backbone flexibility** of protein structures described in the paper [Flexibility-conditioned protein structure design with flow matching](https://openreview.net/forum?id=890gHX7ieS).
+BackFlip is an equivariant model trained to predict **directional per-residue backbone flexibility and dynamic pairwise residue couplings** of protein structures described in the paper [Flexibility-conditioned protein structure design with flow matching](https://openreview.net/forum?id=890gHX7ieS). This repository relies on a copy of [OpenFold](https://github.com/aqlaboratory/openfold) (via [GAFL](https://github.com/hits-mli/gafl)) and code from [FrameFlow](https://github.com/microsoft/protein-frame-flow).
 
-This repository relies on the [GAFL](https://github.com/hits-mli/gafl) package and code from [FrameFlow](https://github.com/microsoft/protein-frame-flow).
+![Equivariant Covariance](assets/exp_ellipsoids_new.png)
+<em>BackFlip is an equivariant model that captures directionality (anisotropy) of flexibility, as observed in MD. The non-equivariant model is only capable of predicting non-directional (isotropic) flexibility.
+</em>
 
 ---
 
 ## Table of contents 
 
+- [TODO](#todo)
 - [Colab Tutorial](#colab-tutorial)
 - [Inference](#inference)
 - [Installation](#installation)
@@ -19,6 +24,16 @@ This repository relies on the [GAFL](https://github.com/hits-mli/gafl) package a
 - [Training](#training)
 - [Citation](#citation)
 
+## TODO
+
+- [x] Replace the `backflip-1.0`/`backflip-1.0-seq` checkpoint downloads with versions matching the current model and output keys (`per_res_covariance`, `pairwise_couplings`, `pairwise_DCCM`): added `backflip-2.1` (ATLAS), `backflip-2.1-mdcath`, `backflip-2.1-joint`.
+- [x] Remove attn_maps and pairfeats of ESMf from the dataset
+- [x] Upload and link the updated datasets (ATLAS, mdCATH, and the joint ATLAS+mdCATH split) with the renamed features and update the corresponding readme section
+- [x] Finish instructive_examples.py; now loads from a tag
+- [x] update test equivariance for the tag
+- [x] Update the Colab tutorial to match the current inference outputs
+- [ ] Update citation for the arxiv link once published and description
+- [x] train with newly refactored code
 
 ## Colab Tutorial
 
@@ -26,39 +41,52 @@ We provide an instructive [Google Colab tutorial for predicting the flexibility 
 
 ## Inference
 
-We provide two pretrained model checkpoints as tags ```backflip-1.0``` that is trained entirely independent of sequence information and ```backflip-1.0-seq``` that has a one-hot sequence encoding. We find that ```backflip-1.0-seq``` performs slightly better on all metrics. For comparison, please see the table with metrics we report below.
+<!-- We provide two pretrained model checkpoints as tags ```backflip-1.0``` that is trained entirely independent of sequence information and ```backflip-1.0-seq``` that has a one-hot sequence encoding and performs slightly better. -->
 
-### Command line interface
-
-BackFlip comes with two commands for inference:
-
-1. `backflip-predict`: Predict per-residue flexibility for a single protein and store it as b factor in a pdb file, e.g.:
-
-```bash
-backflip-predict 1ubq.pdb --tag backflip-1.0 --output 1ubq_global_rmsf.pdb
-```
-
-2. `backflip-annotate`: Efficiently annotate a folder of pdb files with predicted flexibility.
-
-See `scripts/cmd_line_example.sh` for an example script demonstrating the command line interface.
-
+We provide three pretrained model checkpoints as tags: ```backflip-2.1``` (trained on ATLAS), ```backflip-2.1-mdcath``` (trained on mdCATH) and ```backflip-2.1-joint``` (trained on the joint ATLAS + mdCATH split). All three take backbone frames plus one-hot amino-acid type and predict `per_res_covariance`, `pairwise_couplings` and `pairwise_DCCM`. ```backflip-2.1``` is the default, i.e. `tag='latest'`.
 
 ### Using BackFlip directly in python
 
 ```python
 from backflip.deployment.inference_class import BackFlip
+from backflip.data.flexibility_utils import batched_rmsf_from_covar
 
 # Load backflip model from tag:
-bf = BackFlip.from_tag(tag='backflip-1.0', device='cpu')
+bf = BackFlip.from_tag(tag='backflip-2.1', device='cpu')
 
 # run backflip
 prediction = bf.predict_from_pdb(pdb_path='./test_data/inference_examples/from_pdb_folder/1ubq.pdb')
 ```
-This will return a dictionary with local and global flexibility.
+This returns a dictionary with three predicted edge features: 
+- `per_res_covariance`, the (N, 3, 3) anisotropic covariance of each residue's own fluctuations 
+- `pairwise_couplings`, the (N, N) raw CA-CA covariance between residue pairs and
+- `pairwise_DCCM`, the dynamic cross-correlation matrix derived from `pairwise_couplings` (values in [-1, 1]). 
+- The familiar isotropic global RMSF profile is derived from `per_res_covariance`:
 
-![Ubiquitin Inference](assets/backflip_ubq_inference.png)
+```python
+global_rmsf = batched_rmsf_from_covar(prediction['per_res_covariance'])[0]
+```
+
+![Ubiquitin Inference](assets/1ubq_backflip_flexibility_prediction.png)
 <em>
-Local flexibility and global RMSF for ubiquitin (1UBQ), predicted by BackFlip with the above code snippet. BackFlip predicts the alpha helix as locally stiff, the beta sheet as slightly more flexible, and the C-terminus as very flexible.</em>
+Global RMSF (derived from the predicted per-residue covariance) and the predicted dynamic cross-correlation matrix (DCCM) for ubiquitin (1UBQ). Entries close to +1 in the DCCM indicate residues that move in a correlated fashion, entries close to -1 indicate anticorrelated motion.</em>
+
+### Command line interface
+
+BackFlip comes with two commands for inference:
+
+1. `backflip-predict`: Predict per-residue flexibility for a single protein, e.g.:
+
+```bash
+# write the isotropic RMSF profile to a TXT file
+backflip-predict 1ubq.pdb --tag backflip-2.1 --output 1ubq_global_rmsf.txt
+# or write it as a B-factor into a new CIF file
+backflip-predict 1ubq.pdb --tag backflip-2.1 --output 1ubq_global_rmsf.cif --rmsf-as-bfactor
+```
+
+2. `backflip-annotate`: Efficiently annotate a folder of pdb/cif files with predicted per-residue covariance, optionally also writing the isotropic RMSF as a B-factor into CIF files (`--rmsf-as-bfactor`). As explained in [Dataset annotation](#dataset-annotation) below, this always writes a `npz/` subfolder with the raw predictions, and additionally a `cifs/` subfolder with the B-factor-annotated CIF files if `--rmsf-as-bfactor` is set.
+
+See `scripts/cmd_line_example.sh` for an example script demonstrating the command line interface.
 
 ### Dataset annotation
 
@@ -73,30 +101,34 @@ from pathlib import Path
 pdb_folder_test = Path('./test_data/inference_examples/from_pdb_folder').resolve()
 
 # Download model weights and load backflip model from tag:
-bf = BackFlip.from_tag(tag='backflip-1.0', device='cuda', progress_bar=True)
+bf = BackFlip.from_tag(tag='backflip-2.1', device='cuda', progress_bar=True)
 
-# Predict and write local RMSF as a b-factor to the pdb files
-bf.predict(pdb_folder=pdb_folder_test,cuda_memory_GB=8)
+# Predict per-residue covariance/couplings for every file, and also write the isotropic
+# RMSF as a B-factor into a .cif file:
+bf.predict(input_path=pdb_folder_test, cuda_memory_GB=8, rmsf_as_bfactor=True)
 ```
+
+By default (`overwrite=False`), this writes into an `inference_results` folder next to the inputs (or into `output_folder` if given). Inside it, a `npz/` subfolder is always created, holding one `*_pred.npz` file per input with the raw `per_res_covariance`/`pairwise_couplings`/`pairwise_DCCM` predictions. A `cifs/` subfolder is created only if `rmsf_as_bfactor=True`, holding one `.cif` file per input with the isotropic global RMSF (derived from `per_res_covariance`) written into the B-factor column. If `rmsf_as_bfactor=False` (the default), no `cifs/` folder is written.
 
 We recommend running inference with BackFlip given a folder containing .pdb or .cif files as input. You can also point just to the structural file itself. For more details and brief analyses we refer to the example inference script available at `scripts/instructive_examples.py`.
 
 ### Evaluating checkpoints
-We provide an evaluation script at `experiments/inference_csv.py` that can be used to evaluate BackFlip on a dataset split as the ATLAS dataset we provide below. If you follow the steps below, you can evaluate BackFlip-1.0 on the FlexPert dataset split by running:
+We provide an evaluation script at `backflip/analyses/analyse_backflip.py` that compares BackFlip predictions against a ground-truth dataset (as produced by `scripts/dataset/generate_dataset.py`, e.g. the ATLAS dataset we provide below) and reports RMSF, DCCM, and covariance-ellipsoid overlap metrics.
+
+First run inference to produce `*_pred.npz` files, e.g. via `backflip-annotate` or `BackFlip.predict(...)`, then run:
 
 ```bash
-python experiments/inference_csv.py ATLAS-v5-mean_rmsf/flexpert_test.csv --tag backflip-1.0
+python backflip/analyses/analyse_backflip.py \
+    --inference_folder /path/to/inference_results/npz \
+    --gt_npz_folder /path/to/ground_truth_dataset \
+    --output_csv metrics.csv
 ```
 
-### Compute local or global RMSF
+This prints metrics reported in the paper across all matched proteins, and optionally saves the full per-protein metrics table to `--output_csv`.
 
-We provide a detailed explanation on how to compute local or global RMSF in `scripts/example_rmsf.py`.
+### Equivariance of predicted covariance matrices
 
-### Comparison of BackFlip’s performance with other DL-based flexibility prediction models
-
-We trained BackFlip-1.0 on the same dataset split (and global RMSF definition) as in FlexPert [1] and report the metrics in the table below. We compare with the recent FlexPert [1] and PEGASUS [2] models.
-
-![BackFlip performance](assets/backflip_performance.png)
+BackFlip predicts an equivariant directional (anisotropic) per-residue covariances(`per_res_covariance`): rotating the input structure rotates the predicted covariance matrices accordingly. This can be verified with `scripts/covar_analyses/equivariance_test.py`.
 
 ---
 
@@ -133,14 +165,7 @@ Install the dependencies from the requirements file:
 git clone https://github.com/graeter-group/backflip.git
 pip install -r backflip/install_utils/requirements.txt
 
-# BackFlip builds on top of the GAFL package, which is installed from source:
-git clone https://github.com/hits-mli/gafl.git
-cd gafl
-bash install_gatr.sh # Apply patches to gatr (needed for gafl)
-pip install -e . # Install GAFL
-cd ..
-
-# Finally, install backflip with pip:
+# Install backflip with pip (this also installs the vendored openfold package):
 cd backflip
 pip install -e .
 ```
@@ -156,7 +181,7 @@ where you can replace cu124 by your cuda version, e.g. cu118 or cu121.
 
 ### conda
 
-FliPS relies on the [GAFL](https://github.com/hits-mli/gafl) package, which can be installed from GitHub as shown below. The dependencies besides GAFL are listed in `install_utils/environment.yaml`, we also provide a minimal environment in `install_utils/minimal_env.yaml`, where it is easier to change torch/cuda versions.
+The dependencies are listed in `install_utils/environment.yaml`, we also provide a minimal environment in `install_utils/minimal_env.yaml`, where it is easier to change torch/cuda versions.
 
 ```bash
 # download backflip:
@@ -165,14 +190,7 @@ git clone https://github.com/graeter-group/backflip.git
 conda env create -f backflip/install_utils/minimal_env.yaml
 conda activate backflip
 
-# install gafl:
-git clone https://github.com/hits-mli/gafl.git
-cd gafl
-bash install_gatr.sh # Apply patches to gatr (needed for gafl)
-pip install -e .
-cd ..
-
-# install backflip:
+# install backflip (this also installs the vendored openfold package):
 cd backflip
 pip install -e .
 ```
@@ -182,28 +200,46 @@ pip install -e .
 Problems with torch_scatter can usually be resolved by uninstalling and re-installing it via pip for the correct torch and cuda version, e.g. `pip install torch-scatter -f https://data.pyg.org/whl/torch-2.0.0+cu124.html` for torch 2.0.0 and cuda 12.4.
 
 ---
-
 ## Dataset
 
-We provide the ATLAS dataset [3] with global_rmsf and local_flex features used for training and evaluation of BackFlip. To download the dataset, run:
+We provide the ATLAS dataset [2] with precomputed per-residue covariance and pairwise coupling features used for training and evaluation of BackFlip. To download the dataset, run:
 
 ```bash
 wget --content-disposition https://keeper.mpdl.mpg.de/f/0ebae6ed7c0c42beb778/?dl=1
 ```
 
-Both data splits as in FlexPert [1] and for the model reported in the ICML 2025 paper can be found in the downloaded compressed dataset folder. Note that the latest model, BackFlip-1.0 was trained on the flexpert dataset split.
-Before training or evaluating the model, the paths pointing to the corresponding .npz files need to be changed to absolute paths on the local machine. This can be done by running:
+Both data splits as in FlexPert [1] and for the model reported in the ICML 2025 paper can be found in the downloaded compressed dataset folder. Note that the latest model, BackFlip-1.0 was trained on the flexpert dataset split. Before training or evaluating the model, the paths pointing to the corresponding .npz files need to be changed to absolute paths on the local machine. This can be done by running:
 
 ```bash
 tar -xvf ATLAS_backflip_release.tar
 python scripts/rename_csv_paths.py ATLAS-v5-mean_rmsf/flexpert_test.csv ATLAS-v5-mean_rmsf/flexpert_train.csv ATLAS-v5-mean_rmsf/flexpert_val.csv
 ```
 
-**Note:** The dataset is a modified version of the ATLAS dataset (adds precomputed `global_rmsf` and `local_flex`). ATLAS is licensed **CC BY-NC 4.0**; attribution required; **non-commercial use only**. See [4] and the upstream license.
+**Note:** The dataset is a modified version of the ATLAS dataset (adds precomputed per-residue covariance and pairwise coupling features). ATLAS is licensed **CC BY-NC 4.0**; attribution required; **non-commercial use only**. See [2] and the upstream license.
+
+### Datasets for the `backflip-2.1` models
+
+The `backflip-2.1*` checkpoints were trained on the datasets below, with the renamed
+features (`per_res_covariance`, `pairwise_couplings`, `pairwise_DCCM`). Each archive
+unpacks to a folder of per-protein `.npz` files (except the joint split, which only
+contains the split-definition CSVs and references the `.npz` files from the other two).
+
+```bash
+# ATLAS train split (~4.9 GB)      -> used for  backflip-2.1
+wget -O backflip_atlas_train.tar "https://keeper.mpdl.mpg.de/f ed58d96c50a74513a432/?dl=1"
+
+# mdCATH dataset (~11.3 GB)        -> used for  backflip-2.1-mdcath
+wget -O backflip_mdcath_dataset.tar "https://keeper.mpdl.mpg.de/f/24517dcb594e41279e1c/?dl=1"
+
+# joint ATLAS + mdCATH split CSVs  -> used for  backflip-2.1-joint
+wget -O backflip_atlas_mdcath_joint_dataset.tar "https://keeper.mpdl.mpg.de/f/316a89a9627842ec9f40/?dl=1"
+```
+
+As above, after `tar -xvf <archive>` update the paths in the split CSVs to absolute local paths with `python scripts/rename_csv_paths.py <csv> ...` before training or evaluating.
 
 ## Training
 
-To train a model to predict global RMSF and local flexibility on the dataset we provide, run:
+To train a model to predict per-residue covariance and pairwise couplings on the dataset we provide, run:
 
 ```python
 python experiments/train.py --config-path ../configs --config-name train data.dataset.train_csv_path=/<path_to_train_csv> data.dataset.val_csv=/<path_to_val_csv> data.dataset.test_csv=/<path_to_test_csv> 
@@ -226,14 +262,10 @@ url={https://openreview.net/forum?id=890gHX7ieS}
 }
 ```
 
-The code relies on the [GAFL](https://github.com/hits-mli/gafl) package and code from [FrameFlow](https://github.com/microsoft/protein-frame-flow). It would be appreciated if you also cite the two respective papers if you use the code.
-
 ## References
 
-[1] Kouba, Petr, et al. "Learning to engineer protein flexibility." arXiv preprint arXiv:2412.18275 (2024).
+[1] Kouba, Petr et al. "Learning to engineer protein flexibility." arXiv preprint arXiv:2412.18275 (2024).
 
-[2] Vander Meersche, Yann, et al. "PEGASUS: Prediction of MD‐derived protein flexibility from sequence." Protein Science 34.8 (2025).
+[2] ATLAS dataset: [Link to upstream source](https://www.dsimb.inserm.fr/ATLAS). License: CC BY-NC 4.0.
 
-[3] Vander Meersche, Y., Cretin, G., Gheeraert A., Gelly, J. C., & Galochkina, T. (2023). ATLAS: protein flexibility description from atomistic molecular dynamics simulations. Nucleic Acids Research, gkad1084.
-
-[4] ATLAS dataset: [Link to upstream source](https://www.dsimb.inserm.fr/ATLAS). License: CC BY-NC 4.0.
+[3] Jing, Bowen et al. "AlphaFold meets flow matching for generating protein ensembles." arXiv preprint arXiv:2402.04845 (2024).

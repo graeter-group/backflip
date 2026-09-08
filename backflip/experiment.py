@@ -19,8 +19,7 @@ from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from packaging import version
 
-from gafl.experiment_utils import get_pylogger, flatten_dict
-
+from backflip.utils import get_pylogger, flatten_dict
 from backflip.models.flexibility_module import FlexibilityModule
 from backflip.data.pdb_dataloader import PdbDataModule
 
@@ -78,7 +77,7 @@ class Experiment:
             if self._exp_cfg.use_wandb and isinstance(logger.experiment.config, wandb.sdk.wandb_config.Config):
                 logger.experiment.config.update(flat_cfg)
 
-        devices = GPUtil.getAvailable(order='memory', limit = 8)[:self._exp_cfg.num_devices]
+        devices = GPUtil.getAvailable(order='first', limit = 8)[:self._exp_cfg.num_devices]
         self.log.info(f"Using devices: {devices}")
 
         trainer_kwargs = dict(
@@ -117,7 +116,6 @@ class Experiment:
         self.log.info(f"Evaluating checkpoint with best val loss at \n{Path(best_ckpt_path).absolute()}")
 
         self.test(ckpt_path=best_ckpt_path, evaluate_on_train=True)
-
 
     def test(self, ckpt_path: Union[Path, str], inference_dir: Union[Path, str]=None, evaluate_on_train: bool=True):
         """
@@ -166,7 +164,6 @@ class Experiment:
         logging.getLogger().setLevel(logging.WARNING)
         self.trainer.test(self._model, datamodule=self._datamodule)
         logging.getLogger().setLevel(logging.INFO)
-
 
         # save test data that is now written in the pl module class
         pdbnames = self._model.test_targets['pdb_name']

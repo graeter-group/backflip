@@ -4,9 +4,11 @@ setup(
     name="backflip",
     packages=[
         "backflip",
+        "openfold",
     ],
     package_dir={
         "backflip": './backflip',
+        "openfold": './openfold',
     },
     entry_points={
         "console_scripts": [

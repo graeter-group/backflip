@@ -3,78 +3,11 @@ import logging
 import torch
 import os
 import numpy as np
-from gafl.analysis import utils as au
 from pytorch_lightning.utilities.rank_zero import rank_zero_only
 import pandas as pd
 from pathlib import Path
 import re
-
-def save_traj(
-        sample: np.ndarray,
-        bb_prot_traj: np.ndarray,
-        x0_traj: np.ndarray,
-        diffuse_mask: np.ndarray,
-        output_dir: str,
-        aatype = None,
-    ):
-    """Writes final sample and reverse diffusion trajectory.
-
-    Args:
-        bb_prot_traj: [T, N, 37, 3] atom37 sampled diffusion states.
-            T is number of time steps. First time step is t=eps,
-            i.e. bb_prot_traj[0] is the final sample after reverse diffusion.
-            N is number of residues.
-        x0_traj: [T, N, 3] x_0 predictions of C-alpha at each time step.
-        aatype: [T, N, 21] amino acid probability vector trajectory.
-        res_mask: [N] residue mask.
-        diffuse_mask: [N] which residues are diffused.
-        output_dir: where to save samples.
-
-    Returns:
-        Dictionary with paths to saved samples.
-            'sample_path': PDB file of final state of reverse trajectory.
-            'traj_path': PDB file os all intermediate diffused states.
-            'x0_traj_path': PDB file of C-alpha x_0 predictions at each state.
-        b_factors are set to 100 for diffused residues and 0 for motif
-        residues if there are any.
-    """
-
-    # Write sample.
-    diffuse_mask = diffuse_mask.astype(bool)
-    sample_path = os.path.join(output_dir, 'sample.pdb')
-    prot_traj_path = os.path.join(output_dir, 'bb_traj.pdb')
-    x0_traj_path = os.path.join(output_dir, 'x0_traj.pdb')
-
-    # Use b-factors to specify which residues are diffused.
-    b_factors = np.tile((diffuse_mask * 100)[:, None], (1, 37))
-
-    sample_path = au.write_prot_to_pdb(
-        sample,
-        sample_path,
-        b_factors=b_factors,
-        no_indexing=True,
-        aatype=aatype,
-    )
-    prot_traj_path = au.write_prot_to_pdb(
-        bb_prot_traj,
-        prot_traj_path,
-        b_factors=b_factors,
-        no_indexing=True,
-        aatype=aatype,
-    )
-    x0_traj_path = au.write_prot_to_pdb(
-        x0_traj,
-        x0_traj_path,
-        b_factors=b_factors,
-        no_indexing=True,
-        aatype=aatype
-    )
-    return {
-        'sample_path': sample_path,
-        'traj_path': prot_traj_path,
-        'x0_traj_path': x0_traj_path,
-    }
-
+import math
 
 def get_pylogger(name=__name__) -> logging.Logger:
     """Initializes multi-GPU-friendly python command line logger."""
@@ -115,3 +48,101 @@ def rename_csv_paths(csv:str, save:bool=True):
         df.to_csv(new_csv_path, index=False)
         print(f"Saved renamed CSV to {new_csv_path}")
     return df
+
+def terminal_mask_hec_torch(
+    global_rmsf: torch.Tensor,   # (B,N,1), float32
+    dssp: torch.Tensor,          # (B,N,1), int32 with {0:H, 1:E, 2:C}
+    gap_tolerance: int = 1,
+    min_len: int = 5,
+    coil_frac_min: float = 0.7,
+    tau: float = 2.0,
+    pi_max: float = 0.25,
+    eps: float = 1e-6,
+) -> torch.Tensor:
+    """
+    Returns mask M in {0,1} with shape (B,N,1). 1=keep in loss, 0=downweight terminals.
+    """
+    assert global_rmsf.ndim == 3 and dssp.ndim == 3 and global_rmsf.shape[:2] == dssp.shape[:2]
+    B, N, _ = global_rmsf.shape
+    device = global_rmsf.device
+
+    M = torch.ones((B, N), dtype=torch.float32, device=device)
+
+    for b in range(B):
+        x = global_rmsf[b, :, 0]                          # (N,)
+        lab = dssp[b, :, 0].to(torch.int32)               # (N,)
+        coil = (lab == 2)                                  # True for 'C'
+        non_coil = (~coil).to(torch.int32)
+
+        L = int(N)
+        if L == 0:
+            continue
+
+        # robust interior stats
+        w = max(10, math.ceil(0.05 * L))
+        if L < 2 * w + 1:
+            w = max(1, L // 4)
+        i0, i1 = w, L - w
+        if i1 <= i0:
+            x_int = x
+        else:
+            x_int = x[i0:i1]
+        med = x_int.median()
+        mad = (x_int - med).abs().median()
+        sigma = (1.4826 * mad).clamp_min(eps)
+
+        # longest coil-dominated prefix with up to g non-coils
+        cum_nc = non_coil.cumsum(dim=0)                    # counts in [0..i]
+        pos = torch.nonzero(cum_nc > gap_tolerance, as_tuple=False)
+        lenN = int(pos[0].item()) if pos.numel() > 0 else L
+        SN = torch.arange(0, lenN, device=device)
+
+        # longest coil-dominated suffix with up to g non-coils
+        cum_nc_rev = non_coil.flip(0).cumsum(dim=0)
+        pos_rev = torch.nonzero(cum_nc_rev > gap_tolerance, as_tuple=False)
+        lenC = int(pos_rev[0].item()) if pos_rev.numel() > 0 else L
+        SC = (L - lenC) + torch.arange(0, lenC, device=device) if lenC > 0 else torch.arange(0, 0, device=device)
+
+        def segment_ok(S: torch.Tensor):
+            if S.numel() < min_len:
+                return False, torch.tensor(0.0, device=device)
+            purity = coil[S].float().mean()
+            if purity.item() < coil_frac_min:
+                return False, purity
+            z = (x[S].mean() - med) / sigma
+            return bool(z.item() >= tau), z
+
+        passN, zN = segment_ok(SN)
+        passC, zC = segment_ok(SC)
+
+        # cap total masked length
+        cap = int(math.floor(pi_max * L))
+        total_len = (SN.numel() if passN else 0) + (SC.numel() if passC else 0)
+        if passN and passC and total_len > cap:
+            if zN.item() >= zC.item():
+                passC = False
+            else:
+                passN = False
+
+        if passN:
+            M[b, SN] = 0.0
+        if passC:
+            M[b, SC] = 0.0
+
+    return M.unsqueeze(-1)  # (B,N,1)
+
+def eigen_decomposition(C: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+    orig_dtype = C.dtype
+    # increased precision for eigen-decomposition to improve numerical stability, especially for small eigenvalues
+    C = C.to(torch.float64)
+    # numerical symmetrization to improve stability of eigen-decomposition, especially for small eigenvalues
+    C = 0.5 * (C + C.transpose(-1, -2))
+    evals, evecs = torch.linalg.eigh(C)
+    evals = torch.clamp(evals, min=eps)
+    return evals.to(orig_dtype), evecs.to(orig_dtype)
+
+def log_C(evals:torch.Tensor, evecs:torch.Tensor) -> torch.Tensor:
+    log_evals = torch.log(evals)
+	# log(C) = U diag(log(lambda)) U^T
+    logC = evecs @ torch.diag_embed(log_evals) @ evecs.transpose(-1, -2)
+    return logC

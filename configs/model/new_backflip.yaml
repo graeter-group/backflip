@@ -1,0 +1,79 @@
+model_type: ipa
+new_node_embedder: True
+
+flexibility:
+  node_outputs:
+    - name: None
+  edge_outputs:
+    - name: per_res_covariance
+    - name: pairwise_couplings
+    - name: pairwise_DCCM
+
+global_rmsf_max_value: 20.0
+node_embed_size: 32
+edge_embed_size: 64
+symmetric: False
+
+node_features:
+  c_s: ${model.node_embed_size}
+  c_pos_emb: 64
+  embed_diffuse_mask: False
+  max_num_res: 2000
+  embed_aatype: True
+  aatype_embed_size: 64
+  embed_breaks: False
+  embed_res_idx: False
+  embed_esm: False
+  esm_input_dim: 1024
+  esm_embed_size: 128
+  layer_norm_esm: True
+  
+edge_features:
+  single_bias_transition_n: 2
+  c_s: ${model.node_embed_size}
+  c_p: ${model.edge_embed_size}
+  relpos_k: 64
+  use_rbf: True
+  num_rbf: 32
+  feat_dim: 32
+  num_bins: 22
+  embed_breaks: False
+  embed_res_idx: True
+  embed_distance_encoding: True
+  distance_encoding_dim: 32
+  embed_esmfold_pair_repr: False
+  esmfold_pair_repr_dim: 128 # size of output of esmfold model
+  equivariant_covariance: True
+  symmetrize_edges_CA: False
+  fuse_node_edges_per_res_cov: False
+  fuse_node_edges_ca_cov: False
+  ablate_cholesky_CA_head: True
+  ablate_cholesky_per_res_head: True
+  use_only_nodes_per_res_cov: True
+  ca_cov_head_dropout: 0.0
+
+gfa:
+  c_s: ${model.node_embed_size}
+  c_z: ${model.edge_embed_size}
+  c_hidden: 32
+  no_heads: 4
+  no_qk_points: 4
+  no_v_points: 4
+  body_order: 3
+  seq_tfmr_num_heads: 4
+  seq_tfmr_num_layers: 1
+  num_blocks: 4
+  readout_c_hidden: 16
+
+ipa:
+  c_s: ${model.node_embed_size}
+  c_z: ${model.edge_embed_size}
+  c_hidden: 32
+  no_heads: 4
+  no_qk_points: 4
+  no_v_points: 4
+  body_order: 3
+  seq_tfmr_num_heads: 4
+  seq_tfmr_num_layers: 1
+  num_blocks: 4
+  readout_c_hidden: 16

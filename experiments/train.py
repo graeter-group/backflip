@@ -3,14 +3,11 @@ import torch
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from gafl.experiment_utils import get_pylogger
-
+from backflip.utils import get_pylogger
 from backflip.experiment import Experiment
 
 log = get_pylogger(__name__)
 torch.set_float32_matmul_precision('high')
-
-
 
 @hydra.main(version_base=None, config_path="../configs", config_name="train")
 def main(cfg: DictConfig):

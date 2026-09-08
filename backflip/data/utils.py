@@ -22,8 +22,7 @@ import io
 import pandas as pd
 import gzip
 
-from gafl.data import residue_constants
-
+from backflip.data import residue_constants
 from backflip.data import protein
 
 Rigid = ru.Rigid
@@ -668,7 +667,6 @@ def process_chain_npz(npz_feats: struc.AtomArray,
         chain_index=np.array(chain_ids),
         dssp=dssp,)
 
-
 def metadata_naming_convention(df: pd.DataFrame)->pd.DataFrame:
     '''
     Renames certain cols in the dataframe to match the naming convention of metadata files
@@ -743,6 +741,37 @@ def has_inconstistent_indexing(chain_feats:dict):
         return True
     else:
         return False
+
+def dist_breaks(chain_feats:dict, max_ca_ca_distance=4.5):
+    '''
+    Returns the indices of the residues where the ca-ca distance is greater than max_ca_ca_distance
+    '''
+    # check ca_ca distance:
+    xyz = chain_feats['trans_1']
+    if isinstance(xyz, torch.Tensor):
+        xyz = xyz.detach().cpu().numpy()
+    elif isinstance(xyz, list):
+        xyz = np.array(xyz)
+    elif not isinstance(xyz, np.ndarray):
+        raise ValueError(f"xyz must be a torch.Tensor, list or np.ndarray, not {type(xyz)}")
+
+    # calculate distances between subsequent CA atoms:
+    subsequent_dists = np.linalg.norm(xyz[1:] - xyz[:-1], axis=1)
+    return np.where(subsequent_dists >= max_ca_ca_distance)[0]
+
+def idx_breaks(chain_feats:dict):
+    '''
+    Returns the indices of the residues where the res_idx is not continuous
+    '''
+    res_idxs = chain_feats['res_idx']
+    if isinstance(res_idxs, torch.Tensor):
+        res_idxs = res_idxs.detach().cpu().numpy()
+    elif isinstance(res_idxs, list):
+        res_idxs = np.array(res_idxs)
+    elif not isinstance(res_idxs, np.ndarray):
+        raise ValueError(f"res_idxs must be a torch.Tensor, list or np.ndarray, not {type(res_idxs)}")
+
+    return np.where(res_idxs[1:] - np.roll(res_idxs, 1)[1:] != 1)[0]
 
 def get_structure_backbone(pdb_loc:str, compressed=False, allowed_atoms=['CA'], b_factors=False):
     if compressed:

@@ -21,7 +21,7 @@ from Bio.PDB import PDBParser
 import numpy as np
 import mdtraj as md
 
-from gafl.data import residue_constants
+from backflip.data import residue_constants
 
 FeatureDict = Mapping[str, np.ndarray]
 ModelOutput = Mapping[str, Any]  # Is a nested dict.

@@ -13,12 +13,12 @@ import warnings
 import time
 
 from backflip.models.flexibility_module import FlexibilityModule
-from backflip.deployment.utils import ckpt_path_from_tag, estimate_max_batchsize, read_path, frames_from_pdb, save_prediction, parse_input_paths
+from backflip.deployment.utils import ckpt_path_from_tag, estimate_max_batchsize, frames_from_pdb_tite, frames_from_pdb, read_path, frames_from_pdb, save_prediction, parse_input_paths
 
 class BackFlip:
     """Thin inference wrapper around a trained BackFlip checkpoint."""
 
-    def __init__(self, ckpt_path: Union[str, Path], device: str="cuda", features: List[str]=None, confidence_intervals: bool=False, progress_bar: bool=True, rmsf_type: str='global_rmsf'):
+    def __init__(self, ckpt_path: Union[str, Path], device: str="cuda", features: List[str]=None, confidence_intervals: bool=False, progress_bar: bool=True, rmsf_as_bfactor:bool=False):
         """
         Load a checkpoint and its training config for inference.
 
@@ -49,11 +49,13 @@ class BackFlip:
         self.use_aatype = (hasattr(self._cfg.model, 'node_features') and
                 hasattr(self._cfg.model.node_features, 'embed_aatype') and
                 self._cfg.model.node_features.embed_aatype)
+        
         logging.info(f'[BackFlip] use_aatype: {self.use_aatype}')
 
-        self.rmsf_type = rmsf_type
-        assert self.rmsf_type in ['global_rmsf', 'local_flex'], f"rmsf_type must be 'global_rmsf' or 'local_flex'. Got {self.rmsf_type}."
-
+        # NOTE: deprecated due to the model now being trained only on global_RMSF
+        # self.rmsf_type = rmsf_type
+        # assert self.rmsf_type in ['global_rmsf', 'local_flex'], f"rmsf_type must be 'global_rmsf' or 'local_flex'. Got {self.rmsf_type}."
+        self.rmsf_as_bfactor = rmsf_as_bfactor
         self.progress_bar = progress_bar
 
     @classmethod
@@ -66,7 +68,6 @@ class BackFlip:
         """
         ckpt_path = ckpt_path_from_tag(tag)
         return cls(ckpt_path, device, features, confidence_intervals, progress_bar)
-
         
     def to(self, device: str):
         """Move the loaded model and future inputs to a different device."""
@@ -125,7 +126,7 @@ class BackFlip:
 
         translations, rotations, aatypes = [], [], []
         for path in pdb_path:
-            model_input = frames_from_pdb(pdb_path=path)
+            model_input, _ = frames_from_pdb_tite(pdb_path=path)
             translations.append(model_input['trans_1'])
             rotations.append(model_input['rotmats_1'])
             if self.use_aatype:
@@ -167,11 +168,11 @@ class BackFlip:
 
         if res_idx is None:
             res_idx = [torch.arange(len(tensor)) for tensor in translations]
+        
         assert len(res_idx) == len(translations) == len(rotations), f'Input lists must have the same length. Got {len(translations)}, {len(rotations)}, {len(res_idx)}.'
         assert all([len(t) == len(r) == len(idx) for t, r, idx in zip(translations, rotations, res_idx)]), f'All translations, rotations and res_idx must have the same length (the number of residues).'
 
         self.model.eval().to(self.device)
-
         model_outputs = [None for _ in range(len(lengths))]
 
         for length in np.unique(lengths):
@@ -182,6 +183,7 @@ class BackFlip:
             splits = np.array_split(idxs, n_splits)
 
             for split in splits:
+                torch.cuda.empty_cache()
                 translations_ = torch.stack([translations[i] for i in split], dim=0)
                 rotations_ = torch.stack([rotations[i] for i in split], dim=0)
                 res_mask = torch.ones_like(translations_[...,0]).float()
@@ -202,9 +204,16 @@ class BackFlip:
                 if self.progress_bar:
                     progbar.update(len(split))
 
-                # unbatch:
+                # unbatch: model_output has structure {'node': {...}, 'edge': {...}}
                 for i, idx in enumerate(split):
-                    model_outputs[idx] = {k: v[i] for k,v in model_output.items()}
+                    unbatched = {}
+                    for category_key, category_dict in model_output.items():
+                        if isinstance(category_dict, dict):
+                            for feat_key, feat_val in category_dict.items():
+                                unbatched[feat_key] = feat_val[i].clone()
+                        else:
+                            unbatched[category_key] = category_dict[i].clone()
+                    model_outputs[idx] = unbatched
 
         # assert that all model_outputs are filled
         assert all([m is not None for m in model_outputs]), f'Internal error: not all model_outputs are filled.'
@@ -220,20 +229,23 @@ class BackFlip:
 
         return model_outputs
 
-    def predict(self, input_path: Union[str, Path], output_folder:str=None, batch_size: int = None, cuda_memory_GB: int = 8, stop_grad: bool = True, path_batchsize: int = 1000, overwrite: bool = False):
+    def predict(self, input_path: Union[str, Path], output_folder:str=None, batch_size: int = None, cuda_memory_GB: int = 8, stop_grad: bool = True, path_batchsize: int = 1000, overwrite: bool = False, rmsf_as_bfactor: bool = False):
 
         """
         Run inference on a path or folder and write outputs to disk.
 
         Input paths can be a directory of PDB/CIF files, a single PDB/CIF file,
-        or a CSV pointing to processed npz/pkl files. For PDB/CIF input, the
-        selected profile is written to the B-factor field.
+        or a CSV pointing to processed npz/pkl files. Predicted edge features are
+        always written to a separate .npz file per input.
         Checks whether data is present and only overwrites if `overwrite=True`.
         Args:
             batch_size (int, optional): Maximum batch size. Defaults to None.
             cuda_memory_GB (int, optional): Available GPU memory in GB. Defaults to 8. Reduce if you run out of GPU memory.
             stop_grad (bool, optional): If True, disables gradient computation. Defaults to True.
             path_batchsize (int, optional): Number of paths to process per predict() call. Defaults to 1000. Reduce if you run out of cpu-RAM.
+            rmsf_as_bfactor (bool, optional): If True and input is PDB/CIF, also writes a .cif file
+                with the isotropic RMSF (derived from the predicted per-residue covariance) in the
+                B-factor column. Defaults to False.
         """
 
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -245,7 +257,7 @@ class BackFlip:
 
         paths, input_ext = parse_input_paths(input_path)
         batched_idxs = list(range(0, len(paths), path_batchsize))
-
+        
         if overwrite:
             output_folder = input_path if input_path.is_dir() else input_path.parent if output_folder is None else Path(output_folder)
             logging.info(f'Overwrite is set to True. Rewriting input files in {output_folder}.')
@@ -270,36 +282,67 @@ class BackFlip:
             
             for path in batch_paths:
                 if is_pdb:
-                    model_input = frames_from_pdb(pdb_path=path)
+                    # debug this; tite apparently fucks something up
+                    # model_input, seq = frames_from_pdb(pdb_path=path)
+                    try:
+                        model_input, seq = frames_from_pdb_tite(pdb_path=path)
+                    except Exception as e:
+                        logging.error(f"Error processing {path}: {e}")
+                        continue
+                    chain_ids = model_input['chain_ids'] if 'chain_ids' in model_input else None
+                    if len(chain_ids) > 1:
+                        unique_chains, counts = torch.unique(chain_ids, return_counts=True)
+                        largest_chain = unique_chains[torch.argmax(counts)]
+                        # logging.warning(f"Multiple chains detected in {path}. Using only the largest chain (by residue count) for inference.")
+                        mask = model_input['chain_ids'] == largest_chain
+                        model_input['trans_1'] = model_input['trans_1'][mask]
+                        model_input['rotmats_1'] = model_input['rotmats_1'][mask]
+                        if 'aatype' in model_input:
+                            model_input['aatype'] = model_input['aatype'][mask]
+                        if 'seq_onehot' in model_input:
+                            model_input['seq_onehot'] = model_input['seq_onehot'][mask]
+                        model_input['chain_ids'] = model_input['chain_ids'][mask]
+                    # seq_str = "".join(list(seq))
                 elif is_npz or is_pkl:
                     try:
                         model_input = read_path(path=path)
                     except Exception as e:
                         logging.error(f"Error reading {path}: {e}")
                         continue
+
+                if model_input['trans_1'].shape[0] > 1500:
+                    logging.warning(f"Protein {path} has more than 1500 residues. Skipping due to OOM risk")
+                    continue
+
                 translations.append(model_input['trans_1'])
                 rotations.append(model_input['rotmats_1'])
                 output_paths.append(path)
-
+                
                 if self.use_aatype:
                     assert "aatype" in model_input, f"'aatype' required by model but missing in {path}"
                     aatypes.append(model_input["aatype"])
                 else:
                     aatypes.append(None)
+
             predictions = self.predict_from_frames(translations=translations,
                                                     rotations=rotations,
-                                                    aatypes=aatypes if self.use_aatype else None,                                                    batch_size=batch_size,
+                                                    aatypes=aatypes if self.use_aatype else None,                                                    
+                                                    batch_size=batch_size,
                                                     cuda_memory_GB=cuda_memory_GB,
                                                     stop_grad=stop_grad)
             
-            if is_pdb:
-                logging.info(f"Writing prediction of {self.rmsf_type} as b-factor into {output_folder}...")
+            if is_pdb and rmsf_as_bfactor:
+                logging.info(f"Writing isotropic RMSF as b-factor into {output_folder}...")
             for path, prediction in zip(output_paths, predictions):
-                save_prediction(input_path = path,
+                try:
+                    save_prediction(input_path = path,
                                 prediction = prediction,
                                 output_folder = output_folder,
                                 overwrite = overwrite,
-                                rmsf_type = self.rmsf_type)
+                                rmsf_as_bfactor = rmsf_as_bfactor)
+                except Exception as e:
+                    logging.error(f"Error saving prediction for {path}: {e}")
+                    continue
 
     def predict_from_csv(self, csv_path: Union[str, Path], batch_size: int = None, cuda_memory_GB: int = 8, stop_grad: bool = True, path_batchsize: int = 1000):
         """
@@ -373,5 +416,4 @@ class BackFlip:
         print(f"Total inference time (including I/O) for {len(paths)} entries: {total_time:.2f} seconds.")
         print(f"Total prediction time: {prediction_time:.2f} seconds.")
         print(f"Average prediction time per entry: {prediction_time / len(paths):.2f} seconds.")
-
         return predictions_all, ground_truth_all

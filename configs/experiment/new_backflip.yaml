@@ -1,0 +1,76 @@
+debug: False
+use_wandb: True
+use_tqdm: True
+
+# not sure if it's set anywhere
+seed: 42
+num_devices: 1
+warm_start: null
+warm_start_cfg_override: True
+use_swa: False
+first_val_epoch: 0
+mask_termini: False
+
+wandb:
+  name: backflip_2_train
+  project: backflip_2
+  entity: name
+  save_dir: outputs/
+  tags: []
+optimizer:
+  lr: 0.0001
+  # betas: [0.9, 0.9]
+reset_optimizer_on_load: False
+warmup_lr: False
+warmup_lr_factor: 0.01
+plot_val_every_n: null
+
+node_loss_weights:
+  mse: 0.
+  huber: 0.
+huber_beta: 2
+
+edge_loss_weights:
+  mse: 1.
+  log_frobenius: 1.
+  corr_matrix_dist: 1.
+
+node_prediction_weights:
+  global_rmsf: 0.0
+
+edge_prediction_weights:
+  per_res_covariance: 1.
+  pairwise_couplings: 1.
+  pairwise_DCCM: 1.
+
+# Frobenius reduction
+reduction_frobenius: mean # "mean" or "sum"
+mae_cmd: False
+mae_cmd_weight: 0.5
+mse_rmsf: False
+mse_rmsf_weight: 1.0
+huber_cmd: False
+huber_cmd_weight: 0.5
+pearson_dccm: False
+pearson_dccm_weight: 0.1
+
+trainer:
+  overfit_batches: 0
+  min_epochs: 1 # prevents early stopping
+  max_epochs: 500
+  accelerator: gpu
+  log_every_n_steps: 1
+  deterministic: False
+  strategy: ddp
+  check_val_every_n_epoch: 1
+  default_root_dir: outputs/
+  accumulate_grad_batches: 1
+checkpointer:
+  dirpath: ckpt/${experiment.wandb.project}/${experiment.wandb.name}/${now:%Y-%m-%d}_${now:%H-%M-%S}
+  save_last: True
+  filename: "best"
+  every_n_epochs: 2
+  save_top_k: 30
+  monitor: valid/loss
+  mode: min
+  auto_insert_metric_name: False  

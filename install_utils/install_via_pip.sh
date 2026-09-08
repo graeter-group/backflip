@@ -48,15 +48,7 @@ pip install -r $BACKFLIP_DIR/install_utils/tmp_requirements.txt
 
 rm $BACKFLIP_DIR/install_utils/tmp_requirements.txt
 
-# install gafl from source:
-# Note: this is a temporary solution until gafl is available on pypi
-git clone https://github.com/hits-mli/gafl.git
-pushd gafl
-bash install_gatr.sh # Apply patches to gatr (needed for gafl)
-pip install -e . # Install GAFL
-popd
-
-# Finally, install backflip:
+# Finally, install backflip (this also installs the vendored openfold package):
 cd $BACKFLIP_DIR
 pip install -e . # Install backflip
 

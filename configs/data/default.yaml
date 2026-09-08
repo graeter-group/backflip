@@ -19,7 +19,10 @@ dataset:
   csv_path: null # has no effect, just provided for compatibility with non-splitted datasets
   extra_features:
     - global_rmsf
-    - local_flex
+    - per_res_covariance
+    - pairwise_couplings
+    - pairwise_DCCM
+    
 
 loader:
   num_workers: 4

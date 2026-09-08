@@ -6,6 +6,7 @@ wandb*.json
 **/*.ckpt
 ckpt/
 weights/
+figs_paper/
 
 # PyTorch model files
 **/*.pth
@@ -44,17 +45,35 @@ generate_dataset/
 **/generate_dataset/
 new_scripts/
 scripts/figures
+backflip/analyses/analyse_backflip_aligned.py
 scripts/inference_multiple_ckpts.py
 scripts/inspect_dataset.py
 scripts/analysis_multiple_ckpts.py
 scripts/table_metrics.py
 **debugging_stuff/
 debugging_stuff.py
-
+test_data/inference_examples/from_pdb_folder/inference_results/*
+!scripts/cmd_line_example.sh
+scripts/new_inference.py
+scripts/covar_analyses
+inference_out/
+scripts/inference_debug.py
+scripts/ckpt_stuff.py
 *.sh
+rebuttal_inference/
+rebuttal_results/
+test_rcsb_query_anisou.py
+scripts/dataset/analyse_frame_convergence.py
+scripts/dataset/analyse_frame_convergence_mdcath.py
+scripts/dataset/compare_backflip_published_to_gt.py
+scripts/dataset/compare_pegasus_to_gt.py
+scripts/debug_predict_from_csv.py
+scripts/dataset/strip_npz_keys.py
+functionality_for_ellipsoids.py
 
 # Python debugging files
 **/*.pdb
+*.ipynb
 !test_data/
 !test_data/**
 
@@ -251,6 +270,3 @@ cython_debug/
 scripts/*.png
 test_data/inference_examples/inference_results/*
 ATLAS-v5-mean_rmsf/*
-
-test_data/inference_examples/from_pdb_folder/inference_results/*
-!scripts/cmd_line_example.sh
