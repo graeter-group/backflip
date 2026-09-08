@@ -23,7 +23,6 @@ def correct_ckpt_path(ckpt_path):
     if change_needed:
         torch.save(checkpoint, ckpt_path)
 
-
 def get_flex_predictor(ckpt_path):
     correct_ckpt_path(ckpt_path)
     print(f'ckpt_path in get_flex_predictor: {ckpt_path}')
