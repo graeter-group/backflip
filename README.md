@@ -14,7 +14,6 @@ BackFlip is an equivariant model trained to predict **directional per-residue ba
 
 ## Table of contents 
 
-- [TODO](#todo)
 - [Colab Tutorial](#colab-tutorial)
 - [Inference](#inference)
 - [Installation](#installation)
@@ -22,20 +21,9 @@ BackFlip is an equivariant model trained to predict **directional per-residue ba
 - [Training](#training)
 - [Citation](#citation)
 
-## TODO
-
-- [x] Replace the `backflip-1.0`/`backflip-1.0-seq` checkpoint downloads with versions matching the current model and output keys (`per_res_covariance`, `pairwise_couplings`, `pairwise_DCCM`): added `backflip-2.1` (ATLAS), `backflip-2.1-mdcath`, `backflip-2.1-joint`.
-- [x] Remove attn_maps and pairfeats of ESMf from the dataset
-- [x] Upload and link the updated datasets (ATLAS, mdCATH, and the joint ATLAS+mdCATH split) with the renamed features and update the corresponding readme section
-- [x] Finish instructive_examples.py; now loads from a tag
-- [x] update test equivariance for the tag
-- [x] Update the Colab tutorial to match the current inference outputs
-- [x] Update citation for the arxiv link once published and description
-- [x] train with newly refactored code
-
 ## Colab Tutorial
 
-We provide an instructive [Google Colab tutorial for predicting the flexibility of ubiquitin](https://colab.research.google.com/drive/1nBz26gv7EVa8CxkbuNal6ndGzHZbwqHt?usp=sharing) that requires no local installation. Go ahead and try out BackFlip for your favorite protein!
+We provide an instructive [Google Colab tutorial for predicting the flexibility of ubiquitin](https://colab.research.google.com/drive/1a9LLGYwFE0u4ODh0ULovjDvqaLMUFDQR?usp=sharing) that requires no local installation. Go ahead and try out BackFlip for your favorite protein!
 
 ## Inference
 
