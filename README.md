@@ -1,12 +1,10 @@
 # BackFlip 2: Backbone Flexibility Predictor
 
-_Predicting directional flexibility and pairwise couplings of proteins_
-
 ![BackFlip](assets/backflip_github_small.png)
 
 ## Description
 
-BackFlip is an equivariant model trained to predict **directional per-residue backbone flexibility and dynamic pairwise residue couplings** of protein structures described in the paper [Flexibility-conditioned protein structure design with flow matching](https://openreview.net/forum?id=890gHX7ieS). This repository relies on a copy of [OpenFold](https://github.com/aqlaboratory/openfold) (via [GAFL](https://github.com/hits-mli/gafl)) and code from [FrameFlow](https://github.com/microsoft/protein-frame-flow).
+BackFlip is an equivariant model trained to predict **directional per-residue backbone flexibility and dynamic pairwise residue couplings** of protein structures described in the paper [Predicting directional flexibility in proteins](https://arxiv.org/abs/2609.08474). This repository relies on a copy of [OpenFold](https://github.com/aqlaboratory/openfold) (via [GAFL](https://github.com/hits-mli/gafl)) and code from [FrameFlow](https://github.com/microsoft/protein-frame-flow).
 
 ![Equivariant Covariance](assets/exp_ellipsoids_new.png)
 <em>BackFlip is an equivariant model that captures directionality (anisotropy) of flexibility, as observed in MD. The non-equivariant model is only capable of predicting non-directional (isotropic) flexibility.
@@ -32,7 +30,7 @@ BackFlip is an equivariant model trained to predict **directional per-residue ba
 - [x] Finish instructive_examples.py; now loads from a tag
 - [x] update test equivariance for the tag
 - [x] Update the Colab tutorial to match the current inference outputs
-- [ ] Update citation for the arxiv link once published and description
+- [x] Update citation for the arxiv link once published and description
 - [x] train with newly refactored code
 
 ## Colab Tutorial
@@ -252,6 +250,16 @@ See ```configs/experiment/default.yaml``` for all arguments.
 ## Citation
 
 ```
+@unpublished{viliuga2026backflip,
+      title={Predicting directional flexibility in proteins}, 
+      author={Vsevolod Viliuga and Leif Seute and Matteo Tadiello and Nicolas Wolf and Frauke Gräter and Arne Elofsson},
+      year={2026},
+      eprint={2609.08474},
+      archivePrefix={arXiv},
+      primaryClass={q-bio.BM},
+      url={https://arxiv.org/abs/2609.08474}, 
+}
+
 @inproceedings{
 viliuga2025flexibilityconditioned,
 title={Flexibility-conditioned protein structure design with flow matching},
